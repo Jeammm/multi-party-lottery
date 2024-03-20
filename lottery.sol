@@ -3,7 +3,6 @@
 pragma solidity >=0.7.0 <0.9.0;
 import "./CommitReveal.sol";
 
-
 contract Lottery is CommitReveal{
     struct Player {
         uint choice;
@@ -12,21 +11,32 @@ contract Lottery is CommitReveal{
         bool withdrawn;
     }
 
-    uint public poolSize = 3;
-    uint public T1 = 15;
-    uint public T2 = 30;
-    uint public T3 = 45;
+    uint public poolSize;
+    uint public T1;
+    uint public T2;
+    uint public T3;
+
+    constructor() {
+        poolSize = 3;
+        T1 = 60;
+        T2 = 120;
+        T3 = 180;
+    }
 
     mapping (uint => Player) public player;
     mapping (address => uint) public playerId;
     mapping (uint => address) public confirmedPool;
+    mapping (address => bool) public isJoined;
+
     uint public numPlayer = 0;
     uint public reward = 0;
     uint public numRevealed = 0;
     uint public poolStartTime = 0;
+    bool public isPayed = false;
 
     function joinPool(uint choice, string memory salt) public payable {
         require(numPlayer < poolSize);
+        require(isJoined[msg.sender] == false);
         require(msg.value == 0.001 ether);
         reward += msg.value;
 
@@ -42,6 +52,7 @@ contract Lottery is CommitReveal{
         bytes32 saltHash = keccak256(abi.encodePacked(salt));
         commit(getSaltedHash(bytes32(choice), saltHash));
 
+        isJoined[msg.sender] = true;
         numPlayer++;
     }
 
@@ -56,13 +67,10 @@ contract Lottery is CommitReveal{
         numRevealed++;
     }
 
-
-
     function payPrizeToWinner() public {
         //only pool initiator can run this
         require(msg.sender == player[0].addr);
         require(block.timestamp - poolStartTime > T2 && block.timestamp - poolStartTime <= T3);
-        
 
         uint confirmedCount = 0;
         uint w = 0;
@@ -83,15 +91,16 @@ contract Lottery is CommitReveal{
         w = w % numRevealed;
         address payable winner = payable(player[w].addr);
         uint prize = reward * 98 / 100;
-        uint fee = reward * 2 / 100;
 
-        initiator.transfer(fee);
         winner.transfer(prize);
+        initiator.transfer(reward - prize);
+        isPayed = true;
     }
 
     function withdraw() public {
         require(block.timestamp - poolStartTime > T3);
         require(player[playerId[msg.sender]].withdrawn == false);
+        require(isPayed = false);
         player[playerId[msg.sender]].withdrawn == true;
         address payable account = payable(player[playerId[msg.sender]].addr);
         account.transfer(0.001 ether);
